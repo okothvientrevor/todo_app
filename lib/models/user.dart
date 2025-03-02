@@ -2,30 +2,25 @@ class User {
   final int id;
   final String name;
   final String email;
-  final String? createdAt;
 
-  User({
-    required this.id,
-    required this.name,
-    required this.email,
-    this.createdAt,
-  });
+  User({required this.id, required this.name, required this.email});
 
-  factory User.fromJson(Map<String, dynamic> json) {
+  // Create a copy with updated values
+  User copyWith({int? id, String? name, String? email}) {
     return User(
-      id: json['id'],
-      name: json['name'],
-      email: json['email'],
-      createdAt: json['created_at'],
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
     );
   }
 
+  // Create User from JSON map
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(id: json['id'], name: json['name'], email: json['email']);
+  }
+
+  // Convert User to JSON map
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'email': email,
-      if (createdAt != null) 'created_at': createdAt,
-    };
+    return {'id': id, 'name': name, 'email': email};
   }
 }

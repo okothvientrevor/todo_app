@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:todo_app/screens/add_todo_screen.dart';
-import 'package:todo_app/screens/todo_detail_screen.dart';
-import '../providers/auth_provider.dart';
-import '../providers/todo_provider.dart';
+import 'package:get/get.dart';
+import 'package:todo_app/screens/user_screen.dart';
+import 'package:todo_app/widgets/todo_list_item.dart';
+import '../controllers/auth_controller.dart';
+import '../controllers/todo_controller.dart';
 import '../models/todo.dart';
-// import 'todo_detail_screen.dart';
-// import 'add_todo_screen.dart';
+import 'add_todo_screen.dart';
+import 'todo_detail_screen.dart';
 import 'login_screen.dart';
+import '../theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -16,232 +17,243 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
+  final TodoController todoController = Get.find<TodoController>();
+  final AuthController authController = Get.find<AuthController>();
+  late TabController _tabController;
+  int _currentIndex = 0;
+
   @override
   void initState() {
     super.initState();
-    // Fetch todos when the screen initializes
-    Future.microtask(
-      () => Provider.of<TodoProvider>(context, listen: false).fetchTodos(),
-    );
+    _tabController = TabController(length: 2, vsync: this);
+    _loadTodos();
   }
 
-  Future<void> _refreshTodos() async {
-    await Provider.of<TodoProvider>(context, listen: false).fetchTodos();
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // Extract the loading logic to a separate method
+  Future<void> _loadTodos() async {
+    await todoController.fetchTodos();
   }
 
   Future<void> _logout() async {
-    await Provider.of<AuthProvider>(context, listen: false).logout();
-    if (mounted) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
-    }
+    await authController.logout();
+    Get.offAll(() => LoginScreen());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Todo List'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
+      body: _currentIndex == 0 ? _buildTodoScreen() : const UsersScreen(),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.check_circle_outline),
+            label: 'Tasks',
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
         ],
       ),
-      body: Consumer<TodoProvider>(
-        builder: (context, todoProvider, child) {
-          if (todoProvider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      floatingActionButton:
+          _currentIndex == 0
+              ? FloatingActionButton(
+                onPressed: () => Get.to(() => const AddTodoScreen()),
+                child: const Icon(Icons.add),
+                backgroundColor: AppTheme.primaryColor,
+              )
+              : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+    );
+  }
 
-          if (todoProvider.error != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Error: ${todoProvider.error}',
-                    style: const TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _refreshTodos,
-                    child: const Text('Retry'),
-                  ),
-                ],
+  Widget _buildTodoScreen() {
+    return NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) {
+        return [
+          SliverAppBar(
+            title: const Text('My Tasks'),
+            pinned: true,
+            floating: true,
+            backgroundColor: Colors.black,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.logout),
+                onPressed: _logout,
+                tooltip: 'Logout',
               ),
-            );
-          }
+            ],
+            bottom: TabBar(
+              controller: _tabController,
+              tabs: const [Tab(text: 'Active'), Tab(text: 'Completed')],
+              labelColor: AppTheme.primaryColor,
+              unselectedLabelColor: AppTheme.textSecondary,
+              indicatorColor: AppTheme.primaryColor,
+            ),
+          ),
+        ];
+      },
+      body: Obx(() {
+        if (todoController.isLoading.value) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-          if (todoProvider.todos.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('No todos yet!', style: TextStyle(fontSize: 18)),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AddTodoScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text('Add Your First Todo'),
-                  ),
-                ],
+        if (todoController.error.value != null) {
+          return _buildErrorWidget();
+        }
+
+        // Filter todos based on completion status
+        final activeTodos =
+            todoController.todos.where((todo) => !todo.completed).toList();
+        final completedTodos =
+            todoController.todos.where((todo) => todo.completed).toList();
+
+        return TabBarView(
+          controller: _tabController,
+          children: [
+            // Active todos tab
+            _buildTodoList(activeTodos),
+
+            // Completed todos tab
+            _buildTodoList(completedTodos),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Card(
+        margin: const EdgeInsets.all(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: AppTheme.errorColor,
+                size: 48,
               ),
-            );
-          }
+              const SizedBox(height: 16),
+              Text(
+                'Error: ${todoController.error.value}',
+                style: const TextStyle(color: AppTheme.errorColor),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadTodos,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-          return RefreshIndicator(
-            onRefresh: _refreshTodos,
-            child: ListView.builder(
-              itemCount: todoProvider.todos.length,
-              itemBuilder: (context, index) {
-                final todo = todoProvider.todos[index];
-                return TodoListItem(
-                  todo: todo,
-                  onToggle: (completed) {
-                    todoProvider.toggleTodoStatus(todo.id, completed);
-                  },
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => TodoDetailScreen(todoId: todo.id),
-                      ),
-                    );
-                  },
-                  onDelete: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder:
-                          (context) => AlertDialog(
-                            title: const Text('Delete Todo'),
-                            content: Text(
-                              'Are you sure you want to delete "${todo.title}"?',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Delete'),
-                              ),
-                            ],
-                          ),
-                    );
+  Widget _buildTodoList(List<Todo> todos) {
+    if (todos.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.check_circle,
+              color: AppTheme.textSecondary,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _tabController.index == 0
+                  ? 'No active tasks'
+                  : 'No completed tasks',
+              style: const TextStyle(
+                fontSize: 18,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_tabController.index == 0)
+              ElevatedButton.icon(
+                onPressed: () => Get.to(() => const AddTodoScreen()),
+                icon: const Icon(Icons.add),
+                label: const Text('Add New Task'),
+              ),
+          ],
+        ),
+      );
+    }
 
-                    if (confirmed == true) {
-                      todoProvider.deleteTodo(todo.id);
-                    }
-                  },
+    return RefreshIndicator(
+      onRefresh: _loadTodos,
+      color: AppTheme.primaryColor,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(8),
+        itemCount: todos.length,
+        itemBuilder: (context, index) {
+          final todo = todos[index];
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: TodoListItem(
+              todo: todo,
+              onToggle: (completed) {
+                todoController.updateTodo(
+                  todo.id,
+                  title: todo.title,
+                  description: todo.description,
+                  completed: completed,
+                  dueDate: todo.dueDate,
                 );
+              },
+              onTap: () {
+                Get.to(() => TodoDetailScreen(todoId: todo.id));
+              },
+              onDelete: () async {
+                final confirmed = await Get.dialog<bool>(
+                  AlertDialog(
+                    title: const Text('Delete Task'),
+                    content: Text(
+                      'Are you sure you want to delete "${todo.title}"?',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Get.back(result: false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Get.back(result: true),
+                        child: const Text('Delete'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.errorColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirmed == true) {
+                  todoController.deleteTodo(todo.id);
+                }
               },
             ),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const AddTodoScreen()));
-        },
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-}
-
-class TodoListItem extends StatelessWidget {
-  final Todo todo;
-  final Function(bool) onToggle;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-
-  const TodoListItem({
-    Key? key,
-    required this.todo,
-    required this.onToggle,
-    required this.onTap,
-    required this.onDelete,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Dismissible(
-      key: Key(todo.id.toString()),
-      background: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (direction) async {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                title: const Text('Delete Todo'),
-                content: Text(
-                  'Are you sure you want to delete "${todo.title}"?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-        );
-        return confirmed ?? false;
-      },
-      onDismissed: (direction) {
-        onDelete();
-      },
-      child: Card(
-        elevation: 2,
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: ListTile(
-          leading: Checkbox(
-            value: todo.completed,
-            onChanged: (value) => onToggle(value ?? false),
-          ),
-          title: Text(
-            todo.title,
-            style: TextStyle(
-              decoration: todo.completed ? TextDecoration.lineThrough : null,
-              color: todo.completed ? Colors.grey : null,
-            ),
-          ),
-          subtitle:
-              todo.description != null && todo.description!.isNotEmpty
-                  ? Text(
-                    todo.description!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                  : null,
-          trailing: IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: onDelete,
-          ),
-          onTap: onTap,
-        ),
       ),
     );
   }
