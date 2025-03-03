@@ -64,12 +64,18 @@ class ApiService {
     String name,
     String email,
     String password,
+    String passwordConfirmation,
   ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'name': name, 'email': email, 'password': password}),
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'password_confirmation': passwordConfirmation,
+        }),
       );
 
       final data = jsonDecode(response.body);

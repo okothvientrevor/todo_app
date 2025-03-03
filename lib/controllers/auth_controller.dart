@@ -76,12 +76,18 @@ class AuthController extends GetxController {
     String name,
     String email,
     String password,
+    String passwordConfirmation,
   ) async {
     isLoading.value = true;
     error.value = null;
 
     try {
-      final response = await _apiService.register(name, email, password);
+      final response = await _apiService.register(
+        name,
+        email,
+        password,
+        passwordConfirmation,
+      );
 
       if (response['user'] != null) {
         user.value = User.fromJson(response['user']);
