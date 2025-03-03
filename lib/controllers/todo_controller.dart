@@ -72,6 +72,18 @@ class TodoController extends GetxController {
     isLoading.value = true;
     error.value = null;
 
+    // Find the todo and update it locally first for immediate UI response
+    final todoIndex = todos.indexWhere((todo) => todo.id == id);
+    if (todoIndex != -1) {
+      final updatedTodo = todos[todoIndex].copyWith(
+        title: title,
+        description: description,
+        completed: completed,
+        dueDate: dueDate,
+      );
+      todos[todoIndex] = updatedTodo;
+    }
+
     try {
       final response = await _apiService.updateTodo(
         id,

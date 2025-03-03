@@ -103,6 +103,25 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> getRecentUsers() async {
+    try {
+      final headers = await _getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/recent-users'),
+        headers: headers,
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final data = jsonDecode(response.body);
+        throw data['message'] ?? 'Failed to fetch users';
+      }
+    } catch (e) {
+      throw e.toString();
+    }
+  }
+
   // Get todos
   Future<List<dynamic>> getTodos() async {
     try {

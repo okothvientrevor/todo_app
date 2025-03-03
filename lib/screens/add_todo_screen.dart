@@ -73,7 +73,10 @@ class _AddTodoScreenState extends State<AddTodoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add New Task')),
+      appBar: AppBar(
+        title: const Text('Add New Task'),
+        backgroundColor: Colors.black,
+      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16.0),

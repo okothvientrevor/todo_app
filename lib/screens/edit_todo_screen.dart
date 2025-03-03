@@ -92,6 +92,7 @@ class _EditTodoScreenState extends State<EditTodoScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Task'),
+        backgroundColor: Colors.black,
         actions: [
           IconButton(
             icon: const Icon(Icons.delete),
